@@ -109,9 +109,43 @@ export const fetchAssets = async (): Promise<Asset[]> => {
 }
 
 // 資産を保存（新規作成または更新）
-export const saveAsset = async (asset: Asset): Promise<Asset | null> => {
+// 競合検知: 保存前に現在のupdated_atを確認し、変更されていたら競合として処理
+export const saveAsset = async (asset: Asset, checkConflict: boolean = true): Promise<{ asset: Asset | null; conflict: boolean }> => {
   try {
+    // 競合チェック: 保存前に現在のデータを取得
+    if (checkConflict) {
+      const { data: currentData } = await supabase
+        .from('assets')
+        .select('updated_at')
+        .eq('id', asset.id)
+        .single()
+
+      // 既存データがあり、updated_atが異なる場合は競合
+      if (currentData) {
+        // updated_atを比較（ISO形式と日本語形式の両方に対応）
+        const currentUpdatedAt = currentData.updated_at
+        const assetUpdatedAt = asset.updatedAt
+        
+        // タイムスタンプを比較（文字列形式が異なる可能性があるため、Dateオブジェクトに変換して比較）
+        const currentTime = new Date(currentUpdatedAt).getTime()
+        const assetTime = new Date(assetUpdatedAt).getTime()
+        
+        // 1秒以上の差がある場合は競合とみなす（ネットワーク遅延を考慮）
+        if (Math.abs(currentTime - assetTime) > 1000) {
+          // 最新データを取得して返す
+          const latestAssets = await fetchAssets()
+          const found = latestAssets.find((a) => a.id === asset.id)
+          if (found) {
+            return { asset: found, conflict: true }
+          }
+        }
+      }
+    }
+
     const row = assetToRow(asset)
+    // updated_atを現在時刻に更新（ISO形式で保存）
+    const now = new Date()
+    row.updated_at = now.toISOString()
 
     const { data, error } = await supabase
       .from('assets')
@@ -123,10 +157,10 @@ export const saveAsset = async (asset: Asset): Promise<Asset | null> => {
 
     if (error) throw error
 
-    return rowToAsset(data)
+    return { asset: rowToAsset(data), conflict: false }
   } catch (error) {
     console.error('Error saving asset:', error)
-    return null
+    return { asset: null, conflict: false }
   }
 }
 

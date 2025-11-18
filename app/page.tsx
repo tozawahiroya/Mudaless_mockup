@@ -8,6 +8,7 @@ import { Building2 } from "lucide-react"
 import { initialAssets } from "@/lib/mock-data"
 import type { Asset } from "@/lib/types"
 import { loadAssets, saveAssetsToDb } from "@/lib/db"
+import { supabase } from "@/lib/supabase/client"
 
 export default function Page() {
   const [activeTab, setActiveTab] = useState("customer")
@@ -22,6 +23,34 @@ export default function Page() {
       setIsHydrated(true)
     }
     loadData()
+
+    // Supabase Realtimeで資産の変更を監視（他のデバイスからの更新を検知）
+    if (supabase) {
+      const channel = supabase
+        .channel('assets-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*', // INSERT, UPDATE, DELETE すべてを監視
+            schema: 'public',
+            table: 'assets',
+          },
+          async (payload) => {
+            // データベースから最新のデータを再取得
+            const updatedAssets = await loadAssets()
+            if (updatedAssets.length > 0) {
+              setAssets(updatedAssets)
+            }
+          }
+        )
+        .subscribe()
+
+      return () => {
+        if (supabase) {
+          supabase.removeChannel(channel)
+        }
+      }
+    }
   }, [])
 
   useEffect(() => {

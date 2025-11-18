@@ -11,6 +11,11 @@ export const supabase =
         auth: {
           persistSession: false,
         },
+        realtime: {
+          params: {
+            eventsPerSecond: 10,
+          },
+        },
       })
     : (null as any)
 

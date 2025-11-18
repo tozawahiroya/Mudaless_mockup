@@ -14,6 +14,7 @@ import type { Asset } from "@/lib/types"
 import { CheckCircle2, XCircle, Save, Upload, X, AlertCircle, Loader2, Camera, Download, FileSpreadsheet } from 'lucide-react'
 import { buildings, floors } from "@/lib/mock-data"
 import { uploadFile as uploadFileToStorage, saveAttachmentRecord, getAssetAttachments, deleteAttachmentRecord } from "@/lib/supabase/storage"
+import { saveAssetToDb } from "@/lib/db"
 
 interface AssetEditPanelProps {
   asset: Asset | null
@@ -309,7 +310,7 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
     }
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const errors: { building?: boolean; floor?: boolean } = {}
 
     if (!editedAsset.building) {
@@ -329,11 +330,31 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
       status: "確認待ち" as Asset["status"],
       updatedAt: new Date().toLocaleString("ja-JP"),
     }
-    onSave(updatedAsset)
+    
+    // Supabaseに直接保存（他のデバイスに即座に反映）
+    const result = await saveAssetToDb(updatedAsset)
+    
+    if (result.conflict) {
+      // 競合が発生した場合、最新データを表示
+      alert('他のデバイスでこの資産が更新されました。最新の情報を表示します。')
+      if (result.asset) {
+        setEditedAsset(result.asset)
+        onSave(result.asset)
+      }
+      // パネルは閉じずに最新データを表示
+      return
+    }
+    
+    // 親コンポーネントの状態も更新
+    if (result.asset) {
+      onSave(result.asset)
+    } else {
+      onSave(updatedAsset)
+    }
     onClose()
   }
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     const gutErrors: { g?: boolean; u?: boolean; t?: boolean } = {}
 
     if (!editedAsset.g) {
@@ -351,17 +372,58 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
       return
     }
 
+    const approvedAsset = {
+      ...editedAsset,
+      status: "承認済み" as Asset["status"],
+      updatedAt: new Date().toLocaleString("ja-JP"),
+    }
+    
+    // Supabaseに直接保存（他のデバイスに即座に反映）
+    const result = await saveAssetToDb(approvedAsset)
+    
+    if (result.conflict) {
+      // 競合が発生した場合、最新データを表示
+      alert('他のデバイスでこの資産が更新されました。最新の情報を表示します。')
+      if (result.asset) {
+        setEditedAsset(result.asset)
+      }
+      // パネルは閉じずに最新データを表示
+      return
+    }
+    
     if (onApprove) {
-      onApprove(editedAsset.id, editedAsset)
+      const assetToApprove = result.asset || approvedAsset
+      onApprove(editedAsset.id, assetToApprove)
       onClose()
     }
   }
 
-  const handleReject = () => {
+  const handleReject = async () => {
     if (!rejectComment.trim()) {
       alert("差し戻しの理由を入力してください")
       return
     }
+    
+    const rejectedAsset = {
+      ...editedAsset,
+      status: "差し戻し" as Asset["status"],
+      comment: rejectComment,
+      updatedAt: new Date().toLocaleString("ja-JP"),
+    }
+    
+    // Supabaseに直接保存（他のデバイスに即座に反映）
+    const result = await saveAssetToDb(rejectedAsset)
+    
+    if (result.conflict) {
+      // 競合が発生した場合、最新データを表示
+      alert('他のデバイスでこの資産が更新されました。最新の情報を表示します。')
+      if (result.asset) {
+        setEditedAsset(result.asset)
+      }
+      // パネルは閉じずに最新データを表示
+      return
+    }
+    
     if (onReject) {
       onReject(editedAsset.id, rejectComment)
       onClose()

@@ -8,6 +8,7 @@ import { AssetTable } from "@/components/asset-table"
 import { ProgressDashboard } from "@/components/progress-dashboard"
 import { GutDashboard } from "@/components/gut-dashboard"
 import type { Asset } from "@/lib/types"
+import { saveAssetToDb } from "@/lib/db"
 
 interface CustomerViewProps {
   assets: Asset[]
@@ -20,14 +21,34 @@ export function CustomerView({ assets, setAssets, onImportAssets }: CustomerView
     setAssets((prev) => prev.map((asset) => (asset.id === updatedAsset.id ? updatedAsset : asset)))
   }
 
-  const handleSubmitAssets = (selectedIds: string[]) => {
-    setAssets((prev) =>
-      prev.map((asset) =>
-        selectedIds.includes(asset.id) && asset.status === "未入力"
-          ? { ...asset, status: "確認待ち", updatedAt: new Date().toLocaleString("ja-JP") }
-          : asset,
-      ),
+  const handleSubmitAssets = async (selectedIds: string[]) => {
+    const updatedAssets = assets.map((asset) =>
+      selectedIds.includes(asset.id) && asset.status === "未入力"
+        ? { ...asset, status: "確認待ち" as Asset["status"], updatedAt: new Date().toLocaleString("ja-JP") }
+        : asset,
     )
+    
+    // Supabaseに直接保存（他のデバイスに即座に反映）
+    const conflictIds: string[] = []
+    for (const asset of updatedAssets) {
+      if (selectedIds.includes(asset.id) && asset.status === "確認待ち") {
+        const result = await saveAssetToDb(asset)
+        if (result.conflict && result.asset) {
+          conflictIds.push(asset.id)
+          // 最新データで更新
+          const index = updatedAssets.findIndex((a) => a.id === asset.id)
+          if (index !== -1) {
+            updatedAssets[index] = result.asset
+          }
+        }
+      }
+    }
+    
+    if (conflictIds.length > 0) {
+      alert(`${conflictIds.length}件の資産で他のデバイスからの更新がありました。最新の情報を表示します。`)
+    }
+    
+    setAssets(updatedAssets)
   }
 
   return (

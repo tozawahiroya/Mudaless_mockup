@@ -6,10 +6,8 @@ import { fetchAssets, saveAsset, saveAssets } from './supabase/assets'
 import type { Asset } from './types'
 
 const isSupabaseConfigured = () => {
-  return !!(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  )
+  // コード内に直接記述されているため、常にtrueを返す
+  return typeof window !== 'undefined'
 }
 
 // 資産を読み込む（Supabase優先、フォールバックはlocalStorage）
@@ -57,27 +55,34 @@ export const saveAssetsToDb = async (assets: Asset[]): Promise<boolean> => {
 }
 
 // 単一の資産を保存
-export const saveAssetToDb = async (asset: Asset): Promise<Asset | null> => {
+// 戻り値: { asset: 保存された資産, conflict: 競合が発生したか }
+export const saveAssetToDb = async (asset: Asset): Promise<{ asset: Asset | null; conflict: boolean }> => {
   if (typeof window === 'undefined') {
-    return null
+    return { asset: null, conflict: false }
   }
-
-  // 常にlocalStorageにも保存
-  const currentAssets = loadAssetsFromStorage()
-  const updatedAssets = currentAssets.map((a) => (a.id === asset.id ? asset : a))
-  persistAssetsToStorage(updatedAssets)
 
   if (isSupabaseConfigured()) {
     try {
-      const saved = await saveAsset(asset)
-      if (saved) {
-        return saved
+      const result = await saveAsset(asset, true)
+      
+      // Supabaseに保存成功した場合、localStorageも更新
+      if (result.asset) {
+        const currentAssets = loadAssetsFromStorage()
+        const updatedAssets = currentAssets.map((a) => (a.id === result.asset!.id ? result.asset! : a))
+        persistAssetsToStorage(updatedAssets)
       }
+      
+      return result
     } catch (error) {
       console.warn('Failed to save to Supabase, using localStorage only:', error)
     }
   }
 
-  return asset
+  // localStorageのみに保存（オフライン時）
+  const currentAssets = loadAssetsFromStorage()
+  const updatedAssets = currentAssets.map((a) => (a.id === asset.id ? asset : a))
+  persistAssetsToStorage(updatedAssets)
+
+  return { asset, conflict: false }
 }
 
