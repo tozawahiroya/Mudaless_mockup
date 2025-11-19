@@ -5,12 +5,14 @@ const STORAGE_BUCKET = 'asset-attachments'
 // ファイルをアップロード
 export const uploadFile = async (
   assetId: string,
-  file: File
+  file: File,
+  customFileName?: string
 ): Promise<{ path: string; url: string } | null> => {
   try {
     // ファイル名を生成（重複を避けるため、タイムスタンプを追加）
     const timestamp = Date.now()
-    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
+    const fileName = customFileName || file.name
+    const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_')
     const filePath = `${assetId}/${timestamp}_${sanitizedFileName}`
 
     // ファイルをアップロード

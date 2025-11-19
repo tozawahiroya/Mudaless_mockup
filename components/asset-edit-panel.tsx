@@ -179,6 +179,31 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
     }
   }
 
+  // BlobからFileオブジェクトを作成するヘルパー関数（Fileコンストラクタのフォールバック付き）
+  const createFileFromBlob = (blob: Blob, fileName: string, mimeType: string): File => {
+    try {
+      // Fileコンストラクタが利用可能かチェック
+      if (typeof File !== 'undefined') {
+        // Fileコンストラクタを試行
+        const file = new File([blob], fileName, { type: mimeType })
+        if (file instanceof File) {
+          return file
+        }
+      }
+    } catch (e) {
+      console.warn('File constructor not available, using Blob workaround:', e)
+    }
+    
+    // フォールバック: BlobをFileとして扱う
+    // 注意: これは完全なFileオブジェクトではないが、Supabase Storageのアップロードには動作する
+    const file = Object.assign(blob, {
+      name: fileName,
+      lastModified: Date.now(),
+    }) as File
+    
+    return file
+  }
+
   const capturePhoto = async () => {
     if (!videoRef.current || !canvasRef.current || !editedAsset) return
 
@@ -198,16 +223,21 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
       ctx.drawImage(video, 0, 0)
       canvas.toBlob(async (blob) => {
         if (blob) {
-          const file = new File([blob], `photo_${Date.now()}.jpg`, { type: 'image/jpeg' })
-          const fileName = file.name
-          const newFileNames = [fileName]
-          setEditedAsset({
-            ...editedAsset,
-            attachments: [...editedAsset.attachments, ...newFileNames],
-          })
-          
-          // アップロードを待つ
-          await uploadFile(file, fileName)
+          try {
+            const fileName = `photo_${Date.now()}.jpg`
+            const file = createFileFromBlob(blob, fileName, 'image/jpeg')
+            const newFileNames = [fileName]
+            setEditedAsset({
+              ...editedAsset,
+              attachments: [...editedAsset.attachments, ...newFileNames],
+            })
+            
+            // アップロードを待つ
+            await uploadFile(file, fileName)
+          } catch (error) {
+            console.error('Error creating file from blob:', error)
+            alert('写真の処理中にエラーが発生しました。もう一度お試しください。')
+          }
         }
       }, 'image/jpeg', 0.9)
     }
@@ -367,12 +397,17 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
 
     try {
       // ファイル名を変更（カメラ撮影の場合）
-      const fileToUpload = customFileName
-        ? new File([file], customFileName, { type: file.type })
-        : file
+      // Fileコンストラクタが利用できない場合のフォールバック
+      // 注意: customFileNameはuploadFileToStorage関数に渡されるため、
+      // ここでFileオブジェクトを作り直す必要はない
+      const fileToUpload: File = file
 
-      // Supabase Storageにアップロード
-      const uploadResult = await uploadFileToStorage(editedAsset.id, fileToUpload)
+      // Supabase Storageにアップロード（ファイル名はcustomFileNameを使用）
+      const uploadResult = await uploadFileToStorage(
+        editedAsset.id, 
+        fileToUpload,
+        fileName
+      )
 
       if (!uploadResult) {
         throw new Error('Upload failed')
