@@ -28,24 +28,18 @@ export function CustomerView({ assets, setAssets, onImportAssets }: CustomerView
         : asset,
     )
     
-    // Supabaseに直接保存（他のデバイスに即座に反映）
-    const conflictIds: string[] = []
+    // Supabaseに直接保存（最新データを上書き、他のデバイスに即座に反映）
     for (const asset of updatedAssets) {
       if (selectedIds.includes(asset.id) && asset.status === "確認待ち") {
-        const result = await saveAssetToDb(asset)
-        if (result.conflict && result.asset) {
-          conflictIds.push(asset.id)
-          // 最新データで更新
+        const saved = await saveAssetToDb(asset)
+        if (saved) {
+          // 保存された最新データで更新
           const index = updatedAssets.findIndex((a) => a.id === asset.id)
           if (index !== -1) {
-            updatedAssets[index] = result.asset
+            updatedAssets[index] = saved
           }
         }
       }
-    }
-    
-    if (conflictIds.length > 0) {
-      alert(`${conflictIds.length}件の資産で他のデバイスからの更新がありました。最新の情報を表示します。`)
     }
     
     setAssets(updatedAssets)

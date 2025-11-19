@@ -55,24 +55,24 @@ export const saveAssetsToDb = async (assets: Asset[]): Promise<boolean> => {
 }
 
 // 単一の資産を保存
-// 戻り値: { asset: 保存された資産, conflict: 競合が発生したか }
-export const saveAssetToDb = async (asset: Asset): Promise<{ asset: Asset | null; conflict: boolean }> => {
+// 最新データを上書き保存（競合チェックなし）
+export const saveAssetToDb = async (asset: Asset): Promise<Asset | null> => {
   if (typeof window === 'undefined') {
-    return { asset: null, conflict: false }
+    return null
   }
 
   if (isSupabaseConfigured()) {
     try {
-      const result = await saveAsset(asset, true)
+      const saved = await saveAsset(asset)
       
       // Supabaseに保存成功した場合、localStorageも更新
-      if (result.asset) {
+      if (saved) {
         const currentAssets = loadAssetsFromStorage()
-        const updatedAssets = currentAssets.map((a) => (a.id === result.asset!.id ? result.asset! : a))
+        const updatedAssets = currentAssets.map((a) => (a.id === saved.id ? saved : a))
         persistAssetsToStorage(updatedAssets)
       }
       
-      return result
+      return saved
     } catch (error) {
       console.warn('Failed to save to Supabase, using localStorage only:', error)
     }
@@ -83,6 +83,6 @@ export const saveAssetToDb = async (asset: Asset): Promise<{ asset: Asset | null
   const updatedAssets = currentAssets.map((a) => (a.id === asset.id ? asset : a))
   persistAssetsToStorage(updatedAssets)
 
-  return { asset, conflict: false }
+  return asset
 }
 

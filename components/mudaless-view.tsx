@@ -26,21 +26,10 @@ export function MudalessView({ assets, setAssets }: MudalessViewProps) {
       updatedAt: new Date().toLocaleString("ja-JP"),
     }
     
-    // Supabaseに直接保存（他のデバイスに即座に反映）
-    const result = await saveAssetToDb(approvedAsset)
+    // Supabaseに直接保存（最新データを上書き、他のデバイスに即座に反映）
+    const saved = await saveAssetToDb(approvedAsset)
     
-    if (result.conflict) {
-      // 競合が発生した場合、最新データを使用
-      alert('他のデバイスでこの資産が更新されました。最新の情報を表示します。')
-      if (result.asset) {
-        setAssets((prev) =>
-          prev.map((a) => (a.id === assetId ? result.asset! : a)),
-        )
-      }
-      return
-    }
-    
-    const finalAsset = result.asset || approvedAsset
+    const finalAsset = saved || approvedAsset
     setAssets((prev) =>
       prev.map((a) => (a.id === assetId ? finalAsset : a)),
     )
@@ -57,21 +46,10 @@ export function MudalessView({ assets, setAssets }: MudalessViewProps) {
       updatedAt: new Date().toLocaleString("ja-JP"),
     }
     
-    // Supabaseに直接保存（他のデバイスに即座に反映）
-    const result = await saveAssetToDb(rejectedAsset)
+    // Supabaseに直接保存（最新データを上書き、他のデバイスに即座に反映）
+    const saved = await saveAssetToDb(rejectedAsset)
     
-    if (result.conflict) {
-      // 競合が発生した場合、最新データを使用
-      alert('他のデバイスでこの資産が更新されました。最新の情報を表示します。')
-      if (result.asset) {
-        setAssets((prev) =>
-          prev.map((a) => (a.id === assetId ? result.asset! : a)),
-        )
-      }
-      return
-    }
-    
-    const finalAsset = result.asset || rejectedAsset
+    const finalAsset = saved || rejectedAsset
     setAssets((prev) =>
       prev.map((a) => (a.id === assetId ? finalAsset : a)),
     )

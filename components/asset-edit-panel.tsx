@@ -348,23 +348,12 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
       updatedAt: new Date().toLocaleString("ja-JP"),
     }
     
-    // Supabaseに直接保存（他のデバイスに即座に反映）
-    const result = await saveAssetToDb(updatedAsset)
-    
-    if (result.conflict) {
-      // 競合が発生した場合、最新データを表示
-      alert('他のデバイスでこの資産が更新されました。最新の情報を表示します。')
-      if (result.asset) {
-        setEditedAsset(result.asset)
-        onSave(result.asset)
-      }
-      // パネルは閉じずに最新データを表示
-      return
-    }
+    // Supabaseに直接保存（最新データを上書き、他のデバイスに即座に反映）
+    const saved = await saveAssetToDb(updatedAsset)
     
     // 親コンポーネントの状態も更新
-    if (result.asset) {
-      onSave(result.asset)
+    if (saved) {
+      onSave(saved)
     } else {
       onSave(updatedAsset)
     }
@@ -395,21 +384,11 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
       updatedAt: new Date().toLocaleString("ja-JP"),
     }
     
-    // Supabaseに直接保存（他のデバイスに即座に反映）
-    const result = await saveAssetToDb(approvedAsset)
-    
-    if (result.conflict) {
-      // 競合が発生した場合、最新データを表示
-      alert('他のデバイスでこの資産が更新されました。最新の情報を表示します。')
-      if (result.asset) {
-        setEditedAsset(result.asset)
-      }
-      // パネルは閉じずに最新データを表示
-      return
-    }
+    // Supabaseに直接保存（最新データを上書き、他のデバイスに即座に反映）
+    const saved = await saveAssetToDb(approvedAsset)
     
     if (onApprove) {
-      const assetToApprove = result.asset || approvedAsset
+      const assetToApprove = saved || approvedAsset
       onApprove(editedAsset.id, assetToApprove)
       onClose()
     }
@@ -428,18 +407,8 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
       updatedAt: new Date().toLocaleString("ja-JP"),
     }
     
-    // Supabaseに直接保存（他のデバイスに即座に反映）
-    const result = await saveAssetToDb(rejectedAsset)
-    
-    if (result.conflict) {
-      // 競合が発生した場合、最新データを表示
-      alert('他のデバイスでこの資産が更新されました。最新の情報を表示します。')
-      if (result.asset) {
-        setEditedAsset(result.asset)
-      }
-      // パネルは閉じずに最新データを表示
-      return
-    }
+    // Supabaseに直接保存（最新データを上書き、他のデバイスに即座に反映）
+    await saveAssetToDb(rejectedAsset)
     
     if (onReject) {
       onReject(editedAsset.id, rejectComment)
