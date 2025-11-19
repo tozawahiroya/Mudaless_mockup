@@ -46,12 +46,25 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
     setValidationErrors({})
     setGutValidationErrors({})
     if (asset) {
+      console.log('Loading attachment URLs for asset:', asset.id)
       loadAttachmentUrls(asset.id)
     } else {
       // パネルが閉じられたときにURLをクリア
       setAttachmentUrls({})
     }
   }, [asset])
+  
+  // デバッグ用: attachmentUrlsの変更を監視
+  useEffect(() => {
+    console.log('attachmentUrls updated:', Object.keys(attachmentUrls))
+  }, [attachmentUrls])
+  
+  // デバッグ用: editedAsset.attachmentsの変更を監視
+  useEffect(() => {
+    if (editedAsset) {
+      console.log('editedAsset.attachments updated:', editedAsset.attachments)
+    }
+  }, [editedAsset?.attachments])
 
   // カメラモーダルが開いたときにストリームを開始
   useEffect(() => {
@@ -95,19 +108,32 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
 
   const loadAttachmentUrls = async (assetId: string) => {
     try {
+      console.log('loadAttachmentUrls called for assetId:', assetId)
       const attachments = await getAssetAttachments(assetId)
+      console.log('Fetched attachments from DB:', attachments)
       const urlMap: Record<string, string> = {}
       attachments.forEach((att) => {
         urlMap[att.fileName] = att.url
+        console.log('Mapped URL for:', att.fileName, '->', att.url)
       })
-      setAttachmentUrls(urlMap)
+      setAttachmentUrls((prev) => {
+        // 既存のプレビューURLを保持（アップロード中の一時URL）
+        const merged = { ...prev, ...urlMap }
+        console.log('Merged attachmentUrls:', Object.keys(merged))
+        return merged
+      })
       // ファイル名のリストも更新（データベースから取得した正確なファイル名を使用）
       if (editedAsset) {
         const dbFileNames = attachments.map((att) => att.fileName)
+        // ローカルのattachmentsとDBのattachmentsをマージ（重複を避ける）
+        const mergedFileNames = [
+          ...new Set([...editedAsset.attachments, ...dbFileNames])
+        ]
         setEditedAsset({
           ...editedAsset,
-          attachments: dbFileNames.length > 0 ? dbFileNames : editedAsset.attachments,
+          attachments: mergedFileNames,
         })
+        console.log('Merged file names:', mergedFileNames)
       }
     } catch (error) {
       console.error('Error loading attachment URLs:', error)
@@ -205,33 +231,67 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
   }
 
   const handleCameraCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('handleCameraCapture called', e.target.files)
     const file = e.target.files?.[0]
-    if (!file || !editedAsset) return
+    
+    if (!file) {
+      console.error('No file selected')
+      return
+    }
+    
+    if (!editedAsset) {
+      console.error('No editedAsset')
+      return
+    }
+
+    console.log('File captured:', {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+    })
 
     const fileName = `photo_${Date.now()}.jpg`
     const newFileNames = [fileName]
     
+    console.log('Adding file to attachments:', fileName)
+    
     // 即座にファイル名を追加（ユーザーに即座にフィードバック）
-    setEditedAsset({
-      ...editedAsset,
-      attachments: [...editedAsset.attachments, ...newFileNames],
+    setEditedAsset((prev) => {
+      if (!prev) return null
+      const updated = {
+        ...prev,
+        attachments: [...prev.attachments, ...newFileNames],
+      }
+      console.log('Updated attachments:', updated.attachments)
+      return updated
     })
 
     // 撮影した写真を即座にプレビューとして表示（FileReaderを使用）
     const reader = new FileReader()
+    reader.onerror = (error) => {
+      console.error('FileReader error:', error)
+    }
     reader.onload = (event) => {
       const previewUrl = event.target?.result as string
+      console.log('FileReader onload, previewUrl length:', previewUrl?.length)
       if (previewUrl) {
-        setAttachmentUrls((prev) => ({
-          ...prev,
-          [fileName]: previewUrl, // 一時的なプレビューURL
-        }))
+        setAttachmentUrls((prev) => {
+          const updated = {
+            ...prev,
+            [fileName]: previewUrl, // 一時的なプレビューURL
+          }
+          console.log('Updated attachmentUrls:', Object.keys(updated))
+          return updated
+        })
+      } else {
+        console.error('No previewUrl generated')
       }
     }
     reader.readAsDataURL(file)
 
     // アップロードを開始（バックグラウンドで実行）
     uploadFile(file, fileName).then(() => {
+      console.log('Upload completed successfully')
       // アップロード完了後、正式なURLに更新される（uploadFile内でloadAttachmentUrlsが呼ばれる）
     }).catch((error) => {
       console.error('Upload failed:', error)
@@ -724,9 +784,18 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
                                   alt={fileName}
                                   className="w-full max-h-64 object-contain rounded border bg-muted"
                                   onError={(e) => {
+                                    console.error('Image load error for:', fileName, fileUrl)
                                     e.currentTarget.style.display = 'none'
                                   }}
+                                  onLoad={() => {
+                                    console.log('Image loaded successfully:', fileName)
+                                  }}
                                 />
+                              </div>
+                            )}
+                            {!isUploading && isImage && !fileUrl && (
+                              <div className="px-3 pb-2 text-xs text-muted-foreground">
+                                プレビュー読み込み中...
                               </div>
                             )}
                             {!isUploading && !isImageFile(fileName) && fileUrl && (
