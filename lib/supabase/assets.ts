@@ -157,6 +157,9 @@ export const saveAsset = async (asset: Asset, checkConflict: boolean = true): Pr
 
     if (error) throw error
 
+    // 保存後に少し待ってから返す（Realtimeイベントが確実に発火するように）
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
     return { asset: rowToAsset(data), conflict: false }
   } catch (error) {
     console.error('Error saving asset:', error)

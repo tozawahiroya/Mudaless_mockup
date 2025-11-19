@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { Asset } from "@/lib/types"
-import { CheckCircle2, XCircle, Save, Upload, X, AlertCircle, Loader2, Camera, Download, FileSpreadsheet } from 'lucide-react'
+import { CheckCircle2, XCircle, Save, Upload, X, AlertCircle, Loader2, Camera, Download, FileSpreadsheet, FileText, File } from 'lucide-react'
 import { buildings, floors } from "@/lib/mock-data"
 import { uploadFile as uploadFileToStorage, saveAttachmentRecord, getAssetAttachments, deleteAttachmentRecord } from "@/lib/supabase/storage"
 import { saveAssetToDb } from "@/lib/db"
@@ -106,6 +106,23 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
 
   const isExcelOrCsvFile = (fileName: string) => {
     return /\.(xlsx|xls|csv)$/i.test(fileName)
+  }
+
+  const isPdfFile = (fileName: string) => {
+    return /\.(pdf)$/i.test(fileName)
+  }
+
+  const getFileIcon = (fileName: string) => {
+    if (isImageFile(fileName)) {
+      return null // 画像はプレビュー表示
+    }
+    if (isExcelOrCsvFile(fileName)) {
+      return <FileSpreadsheet className="h-4 w-4" />
+    }
+    if (isPdfFile(fileName)) {
+      return <FileText className="h-4 w-4" />
+    }
+    return <File className="h-4 w-4" />
   }
 
   const handleTakePhoto = () => {
@@ -593,12 +610,11 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
 
               {canEdit && (
                 <div className="grid gap-2">
-                  <Label htmlFor="attachments">添付ファイル（写真・Excel）</Label>
+                  <Label htmlFor="attachments">添付ファイル（写真・Excel・PDF・その他）</Label>
                   <input
                     ref={fileInputRef}
                     type="file"
                     multiple
-                    accept="image/*,.xlsx,.xls,.csv"
                     onChange={handleFileSelect}
                     className="hidden"
                   />
@@ -682,14 +698,16 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
                                 />
                               </div>
                             )}
-                            {!isUploading && isExcelOrCsvFile(fileName) && fileUrl && (
+                            {!isUploading && !isImageFile(fileName) && fileUrl && (
                               <div className="px-3 pb-2">
                                 <a
                                   href={fileUrl}
                                   download={fileName}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
                                   className="flex items-center gap-2 text-sm text-primary hover:underline"
                                 >
-                                  <FileSpreadsheet className="h-4 w-4" />
+                                  {getFileIcon(fileName)}
                                   <span>ダウンロード</span>
                                   <Download className="h-3 w-3 ml-auto" />
                                 </a>
@@ -725,14 +743,16 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
                               />
                             </div>
                           )}
-                          {isExcelOrCsvFile(fileName) && fileUrl && (
+                          {!isImageFile(fileName) && fileUrl && (
                             <div className="px-3 pb-2">
                               <a
                                 href={fileUrl}
                                 download={fileName}
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 className="flex items-center gap-2 text-sm text-primary hover:underline"
                               >
-                                <FileSpreadsheet className="h-4 w-4" />
+                                {getFileIcon(fileName)}
                                 <span>ダウンロード</span>
                                 <Download className="h-3 w-3 ml-auto" />
                               </a>

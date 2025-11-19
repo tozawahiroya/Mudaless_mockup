@@ -26,8 +26,16 @@ export default function Page() {
 
     // Supabase Realtimeで資産の変更を監視（他のデバイスからの更新を検知）
     if (supabase) {
+      let isSubscribed = false
+      let pollInterval: NodeJS.Timeout | null = null
+
       const channel = supabase
-        .channel('assets-changes')
+        .channel('assets-changes', {
+          config: {
+            broadcast: { self: true },
+            presence: { key: '' },
+          },
+        })
         .on(
           'postgres_changes',
           {
@@ -36,6 +44,7 @@ export default function Page() {
             table: 'assets',
           },
           async (payload) => {
+            console.log('Realtime event received:', payload)
             // データベースから最新のデータを再取得
             const updatedAssets = await loadAssets()
             if (updatedAssets.length > 0) {
@@ -43,12 +52,66 @@ export default function Page() {
             }
           }
         )
-        .subscribe()
+        .subscribe((status) => {
+          console.log('Realtime subscription status:', status)
+          if (status === 'SUBSCRIBED') {
+            console.log('Successfully subscribed to Realtime changes')
+            isSubscribed = true
+            // Realtimeが動作している場合はポーリングを停止
+            if (pollInterval) {
+              clearInterval(pollInterval)
+              pollInterval = null
+            }
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            console.warn('Realtime subscription failed, falling back to polling')
+            isSubscribed = false
+            // Realtimeが失敗した場合、ポーリング方式にフォールバック
+            if (!pollInterval) {
+              pollInterval = setInterval(async () => {
+                const updatedAssets = await loadAssets()
+                if (updatedAssets.length > 0) {
+                  setAssets((prev) => {
+                    // 変更があった場合のみ更新
+                    const prevUpdatedAt = prev.map((a) => a.updatedAt).join(',')
+                    const newUpdatedAt = updatedAssets.map((a) => a.updatedAt).join(',')
+                    if (prevUpdatedAt !== newUpdatedAt) {
+                      return updatedAssets
+                    }
+                    return prev
+                  })
+                }
+              }, 3000) // 3秒ごとにポーリング
+            }
+          }
+        })
+
+      // 初期ポーリング（Realtimeが確立されるまでの間）
+      const initialPoll = setInterval(async () => {
+        if (!isSubscribed) {
+          const updatedAssets = await loadAssets()
+          if (updatedAssets.length > 0) {
+            setAssets((prev) => {
+              const prevUpdatedAt = prev.map((a) => a.updatedAt).join(',')
+              const newUpdatedAt = updatedAssets.map((a) => a.updatedAt).join(',')
+              if (prevUpdatedAt !== newUpdatedAt) {
+                return updatedAssets
+              }
+              return prev
+            })
+          }
+        } else {
+          clearInterval(initialPoll)
+        }
+      }, 2000) // 2秒ごとにポーリング
 
       return () => {
         if (supabase) {
           supabase.removeChannel(channel)
         }
+        if (pollInterval) {
+          clearInterval(pollInterval)
+        }
+        clearInterval(initialPoll)
       }
     }
   }, [])

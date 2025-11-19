@@ -72,3 +72,9 @@ CREATE POLICY "Allow reads" ON storage.objects
 CREATE POLICY "Allow deletes" ON storage.objects
   FOR DELETE USING (bucket_id = 'asset-attachments');
 
+-- ============================================
+-- Realtimeの有効化
+-- ============================================
+-- assetsテーブルをRealtimeの監視対象に追加
+ALTER PUBLICATION supabase_realtime ADD TABLE assets;
+
