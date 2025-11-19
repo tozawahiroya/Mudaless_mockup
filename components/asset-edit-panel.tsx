@@ -210,12 +210,46 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
 
     const fileName = `photo_${Date.now()}.jpg`
     const newFileNames = [fileName]
+    
+    // 即座にファイル名を追加（ユーザーに即座にフィードバック）
     setEditedAsset({
       ...editedAsset,
       attachments: [...editedAsset.attachments, ...newFileNames],
     })
 
-    await uploadFile(file, fileName)
+    // 撮影した写真を即座にプレビューとして表示（FileReaderを使用）
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const previewUrl = event.target?.result as string
+      if (previewUrl) {
+        setAttachmentUrls((prev) => ({
+          ...prev,
+          [fileName]: previewUrl, // 一時的なプレビューURL
+        }))
+      }
+    }
+    reader.readAsDataURL(file)
+
+    // アップロードを開始（バックグラウンドで実行）
+    uploadFile(file, fileName).then(() => {
+      // アップロード完了後、正式なURLに更新される（uploadFile内でloadAttachmentUrlsが呼ばれる）
+    }).catch((error) => {
+      console.error('Upload failed:', error)
+      // エラー時はプレビューを削除
+      setAttachmentUrls((prev) => {
+        const next = { ...prev }
+        delete next[fileName]
+        return next
+      })
+      // ファイル名も削除
+      setEditedAsset((prev) => {
+        if (!prev) return null
+        return {
+          ...prev,
+          attachments: prev.attachments.filter((name) => name !== fileName),
+        }
+      })
+    })
 
     if (cameraInputRef.current) {
       cameraInputRef.current.value = ""
