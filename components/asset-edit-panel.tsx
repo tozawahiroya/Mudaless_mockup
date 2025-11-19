@@ -47,6 +47,9 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
     setGutValidationErrors({})
     if (asset) {
       loadAttachmentUrls(asset.id)
+    } else {
+      // パネルが閉じられたときにURLをクリア
+      setAttachmentUrls({})
     }
   }, [asset])
 
@@ -57,18 +60,29 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
       const timer = setTimeout(() => {
         if (videoRef.current && navigator.mediaDevices) {
           navigator.mediaDevices
-            .getUserMedia({ video: { facingMode: 'environment' } })
+            .getUserMedia({ 
+              video: { 
+                facingMode: 'environment',
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+              } 
+            })
             .then((stream) => {
               if (videoRef.current) {
                 videoRef.current.srcObject = stream
+                // ビデオが読み込まれるまで待つ
+                videoRef.current.onloadedmetadata = () => {
+                  console.log('Camera stream loaded')
+                }
               }
             })
             .catch((error) => {
               console.error('カメラへのアクセスエラー:', error)
+              alert('カメラへのアクセスが拒否されました。ブラウザの設定でカメラの許可を確認してください。')
               setShowCamera(false)
             })
         }
-      }, 100)
+      }, 300) // 少し長めに待つ
 
       return () => clearTimeout(timer)
     } else if (videoRef.current?.srcObject) {
@@ -139,17 +153,24 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
     }
   }
 
-  const capturePhoto = () => {
+  const capturePhoto = async () => {
     if (!videoRef.current || !canvasRef.current || !editedAsset) return
 
     const canvas = canvasRef.current
     const video = videoRef.current
+    
+    // ビデオが読み込まれていない場合は待つ
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      alert('カメラが準備できていません。もう一度お試しください。')
+      return
+    }
+    
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight
     const ctx = canvas.getContext('2d')
     if (ctx) {
       ctx.drawImage(video, 0, 0)
-      canvas.toBlob((blob) => {
+      canvas.toBlob(async (blob) => {
         if (blob) {
           const file = new File([blob], `photo_${Date.now()}.jpg`, { type: 'image/jpeg' })
           const fileName = file.name
@@ -158,7 +179,9 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
             ...editedAsset,
             attachments: [...editedAsset.attachments, ...newFileNames],
           })
-          uploadFile(file, fileName)
+          
+          // アップロードを待つ
+          await uploadFile(file, fileName)
         }
       }, 'image/jpeg', 0.9)
     }
@@ -282,6 +305,11 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
 
       // アップロード成功
       setUploadProgress((prev) => ({ ...prev, [fileName]: 100 }))
+      
+      // アップロード後にURLを再取得（確実にプレビューが表示されるように）
+      if (editedAsset) {
+        await loadAttachmentUrls(editedAsset.id)
+      }
     } catch (error) {
       console.error('Error uploading file:', error)
       // エラー時はファイル名をリストから削除
@@ -930,6 +958,7 @@ export function AssetEditPanel({ asset, onClose, onSave, onApprove, onReject, vi
                 ref={videoRef}
                 autoPlay
                 playsInline
+                muted
                 className="w-full h-full object-cover"
               />
               <canvas ref={canvasRef} className="hidden" />
